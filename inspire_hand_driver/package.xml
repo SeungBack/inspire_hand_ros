@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>inspire_hand_driver</name>
+  <version>0.0.1</version>
+  <description>ROS Wrapper for Inspire Hand</description>
+  <maintainer email="shback@kimm.re.kr">seung</maintainer>
+  <license>Apache-2.0</license>
+
+  <depend>xacro</depend>
+  <depend>joint_state_publisher</depend>
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+
+
+  <exec_depend>python3-serial</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <exec_depend>inspire_hand_msgs</exec_depend>
+  
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
