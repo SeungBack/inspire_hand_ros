@@ -11,62 +11,58 @@ from sensor_msgs.msg import JointState
 
 from inspire_hand_driver.hand_wrapper import InspireHand
 from inspire_hand_msgs.msg import InspireHandCmd, InspireHandStat
+from geometry_msgs.msg import TransformStamped
+from tf2_ros import TransformBroadcaster
+import math
+from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 
 from .utils.retargeting_utils import initialize_retargeting, retarget_timestamp, filter_data
 
 from avp_stream import VisionProStreamer
+import time
 
 
 class VisionPro(Node):
     
     def __init__(self):
-        super().__init__('test')
+        super().__init__('vision_pro_node')
         
         self.declare_parameter('speed', 1000)
-        self.declare_parameter('force', 1000)
-        self.declare_parameter('publish_rate', 30.0)  # Hz
+        self.declare_parameter('force', 100)
+        self.declare_parameter('publish_rate', 30)  # Hz
         self.declare_parameter('avp_ip', "192.168.1.104")
+        self.declare_parameter('hand_type', 'both') # List of hand types ['left', 'right', 'both']
 
         self.speed = self.get_parameter('speed').value
         self.force = self.get_parameter('force').value
         self.publish_rate = self.get_parameter('publish_rate').value
         self.avp_ip = self.get_parameter('avp_ip').value
-        
-        self._hand_pub = self.create_publisher(InspireHandCmd, '/hand/cmd', 50)
-        
-        self.timer = self.create_timer(1.0/self.publish_rate, self._timer_callback)
-        
-        
-        self.ros_joint_names = ['pinky_proximal_joint', 'ring_proximal_joint', 'middle_proximal_joint', 'index_proximal_joint', 'thumb_proximal_pitch_joint', 'thumb_proximal_yaw_joint']
-    
+        self.hand_type = self.get_parameter('hand_type').value
         
         # initialize the joint retargeting
         robot_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'inspire_hand_description')
-        self.left_retargeting = initialize_retargeting('inspire', 'left', robot_dir)
-    
-        self.index = 0
-        self.sample_data = np.load('/home/seung/ros2_ws/src/inspire_hand_ros/inspire_hand_driver/data/offline_avp_stream.pkl', allow_pickle=True)
-        self.sample_data = filter_data(self.sample_data, fps=30, duration=15)
         
-        self.stream = VisionProStreamer(ip = self.avp_ip, record = True)
-
-        
-        
-    def sleep_until(self, target_time: Time):
-        """
-        Sleep until the specified ROS Time is reached while still processing callbacks.
-        
-        Args:
-            target_time: The target ROS Time to sleep until
+        if self.hand_type in ['left', 'both']:      
+            self._left_hand_pub = self.create_publisher(InspireHandCmd, '/left/hand/cmd', self.publish_rate)
+            self.left_retargeting = initialize_retargeting('inspire', 'left', robot_dir)
             
-        Returns:
-            bool: True when the target time has been reached
-        """
-        while self.get_clock().now() < target_time:
-            # Process any pending callbacks with a small timeout
-            rclpy.spin_once(self, timeout_sec=0.01)
-        return True
+        if self.hand_type in ['right', 'both']:
+            self._right_hand_pub = self.create_publisher(InspireHandCmd, '/right/hand/cmd', self.publish_rate)
+            self.right_retargeting = initialize_retargeting('inspire', 'right', robot_dir)
         
+        self.timer = self.create_timer(1.0/self.publish_rate, self._timer_callback)
+        self.ros_joint_names = ['pinky_proximal_joint', 'ring_proximal_joint', 'middle_proximal_joint', 'index_proximal_joint', 'thumb_proximal_pitch_joint', 'thumb_proximal_yaw_joint']
+    
+        # vision pro stream
+        self.stream = VisionProStreamer(ip = self.avp_ip, record = True)
+        
+        # tf
+        # self.tf_broadcaster = TransformBroadcaster(self)
+        # # For static transforms (optional)
+        # self.static_broadcaster = StaticTransformBroadcaster(self)
+        # # Set up a timer to publish the transform at a fixed rate
+        # self.counter = 0
+
         
     def rad_to_angle_val(self, rad):
         # for angle 0-3: 1.47-0 to 0-1000
@@ -87,29 +83,45 @@ class VisionPro(Node):
         """Timer callback to send open and close commands."""
         
         single_data = self.stream.latest
-        # single_data = self.sample_data[self.index]
-        result = retarget_timestamp(self.left_retargeting, single_data=single_data)
+        if self.hand_type == 'left':
+            result = retarget_timestamp(self.left_retargeting, single_data=single_data)
+        elif self.hand_type == 'right':
+            result = retarget_timestamp(self.right_retargeting, single_data=single_data)
+        elif self.hand_type == 'both':
+            result = retarget_timestamp(self.left_retargeting, self.right_retargeting, single_data=single_data)
         
-        # right_qpos = self.data['right_qpos'][self.index] # (4, 4)
-        # left_pose = self.data['left_pose'][self.index]
-        # right_pose = self.data['right_qvel'][self.index]
+        if self.hand_type in ['left', 'both']:
+            # convert the left_qpos to the ros joint names
+            left_qpos = result['left_qpos'].tolist() # (12,)
+            left_qpos_idx = [
+                self.left_retargeting.joint_names.index(name) for name in self.ros_joint_names
+            ]
+            left_qpos_ros = [left_qpos[i] for i in left_qpos_idx]
+            left_angle = self.rad_to_angle_val(left_qpos_ros)
+            
+            # publish the command
+            cmd = InspireHandCmd()
+            cmd.angle = left_angle
+            cmd.force = [self.force] * 6
+            cmd.speed = [self.speed] * 6
+            self._left_hand_pub.publish(cmd)
+            
+        if self.hand_type in ['right', 'both']:
+            # convert the right_qpos to the ros joint names
+            right_qpos = result['right_qpos'].tolist()
+            right_qpos_idx = [
+                self.right_retargeting.joint_names.index(name) for name in self.ros_joint_names
+            ]
+            right_qpos_ros = [right_qpos[i] for i in right_qpos_idx]
+            right_angle = self.rad_to_angle_val(right_qpos_ros)
+            # publish the command
+            cmd = InspireHandCmd()
+            cmd.angle = right_angle
+            cmd.force = [self.force] * 6
+            cmd.speed = [self.speed] * 6
+            self._right_hand_pub.publish(cmd)
         
-        # convert the left_qpos to the ros joint names
-        left_qpos = result['left_qpos'].tolist() # (12,)
-        left_qpos_idx = [
-            self.left_retargeting.joint_names.index(name) for name in self.ros_joint_names
-        ]
-        left_qpos_ros = [left_qpos[i] for i in left_qpos_idx]
-        angle = self.rad_to_angle_val(left_qpos_ros)
-        
-        # publish the command
-        cmd = InspireHandCmd()
-        # cmd.angle = [angle[0], angle[1], angle[2], angle[3], 1000, 1000]
-        cmd.angle = angle
-        cmd.force = [self.force] * 6
-        cmd.speed = [self.speed] * 6
-        self._hand_pub.publish(cmd)
-        self.index += 1
+
         
         # open_cmd = InspireHandCmd()
         # open_cmd.angle = [1000, 1000, 1000, 1000, 1000, 1000] 

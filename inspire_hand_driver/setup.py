@@ -22,7 +22,7 @@ setup(
     maintainer='Seunghyeok Back',
     maintainer_email='shback@kimm.re.kr',
     description='ROS Wrapper for Inspire Hand',
-    requires=['pyserial', 'catkin_pkg', 'lark'],
+    requires=['pyserial', 'catkin_pkg'],
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={

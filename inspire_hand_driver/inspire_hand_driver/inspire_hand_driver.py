@@ -25,17 +25,16 @@ class InspireHandDriver(Node):
         self.declare_parameter('port', '/dev/ttyUSB0')
         self.declare_parameter('baudrate', 115200)
         self.declare_parameter('hand_id', 1)
-        self.declare_parameter('publish_rate', 30.0)  # Hz
-        self.declare_parameter('joint_prefix', '')
-        self.declare_parameter('hand_types', ['left']) # List of hand types (left, right)
+        self.declare_parameter('publish_rate', 50)  # Hz
+        self.declare_parameter('hand_type', 'left') # List of hand types ['left', 'right']
         
         # Get parameters
         self.port = self.get_parameter('port').value
         self.baudrate = self.get_parameter('baudrate').value
         self.hand_id = self.get_parameter('hand_id').value
         self.publish_rate = self.get_parameter('publish_rate').value
-        self.joint_prefix = self.get_parameter('joint_prefix').value
-        self.hand_types = self.get_parameter('hand_types').value
+        self.hand_type = self.get_parameter('hand_type').value
+        self.prefix = '/' + self.hand_type
         
         
         self._hand_wrapper = InspireHand(self.port, self.baudrate, self.hand_id)
@@ -54,9 +53,9 @@ class InspireHandDriver(Node):
         
         
         # self.create_subscription() # !TODO:
-        self.create_subscription(InspireHandCmd, '/hand/cmd', self._update_hand_cmd, 10)
-        self._hand_pub = self.create_publisher(InspireHandStat, '/hand/stat', 10)
-        self._hand_joint_state_pub = self.create_publisher(JointState, '/left_hand/joint_states', 10)
+        self.create_subscription(InspireHandCmd, self.prefix  + '/hand/cmd', self._update_hand_cmd, self.publish_rate)
+        self._hand_pub = self.create_publisher(InspireHandStat, self.prefix + '/hand/stat', self.publish_rate)
+        self._hand_joint_state_pub = self.create_publisher(JointState, self.prefix + '/hand/joint_states', self.publish_rate)
         self.timer = self.create_timer(1.0 / self.publish_rate, self._timer_callback)
         
 
@@ -116,7 +115,7 @@ class InspireHandDriver(Node):
         js = JointState()
         js.header.stamp = self.get_clock().now().to_msg()
         js.header.frame_id = "" #!TODO: check this
-        js.name = [self.joint_prefix + j for j in self.joint_names]
+        js.name = [self.hand_type + j for j in self.joint_names]
         angle = self._hand_wrapper.get_angle()
         angle_rad = self.angle_val_to_rad(angle)
         js.position = angle_rad
@@ -126,7 +125,6 @@ class InspireHandDriver(Node):
         self._prev_js_angle = angle_rad
         return js
         
-    
     def angle_val_to_rad(self, angle):
         # pinky to thumb
         # for angle 0-3: 0-1000 to 0-1.47
@@ -140,7 +138,6 @@ class InspireHandDriver(Node):
         angle[5] = 1.308 - angle[5] / 1000 * 1.308
         return angle
         
-    
     def destroy_node(self):
         """Clean up when the node is shutting down."""
         self.get_logger().info("Shutting down robotic hand controller")

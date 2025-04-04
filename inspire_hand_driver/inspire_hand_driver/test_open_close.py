@@ -19,11 +19,14 @@ class OpenCloseHandNode(Node):
         
         self.declare_parameter('speed', 1000)
         self.declare_parameter('force', 100)
-        
+        self.declare_parameter('hand_type', 'right')
+
         self.speed = self.get_parameter('speed').value
         self.force = self.get_parameter('force').value
+        self.hand_type = self.get_parameter('hand_type').value
+        self.prefix = '/' + self.hand_type
         
-        self._hand_pub = self.create_publisher(InspireHandCmd, '/hand/cmd', 10)
+        self._hand_pub = self.create_publisher(InspireHandCmd, self.prefix + '/hand/cmd', 10)
         
         self.timer = self.create_timer(1.0, self._timer_callback)
         

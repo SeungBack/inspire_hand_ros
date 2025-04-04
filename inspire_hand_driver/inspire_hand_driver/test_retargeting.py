@@ -18,14 +18,14 @@ class Test(Node):
         super().__init__('test')
         
         self.declare_parameter('speed', 1000)
-        self.declare_parameter('force', 1000)
+        self.declare_parameter('force', 10)
         self.declare_parameter('publish_rate', 30.0)  # Hz
 
         self.speed = self.get_parameter('speed').value
         self.force = self.get_parameter('force').value
         self.publish_rate = self.get_parameter('publish_rate').value
         
-        self._hand_pub = self.create_publisher(InspireHandCmd, '/hand/cmd', 100)
+        self._hand_pub = self.create_publisher(InspireHandCmd, '/hand/cmd', 30)
         
         self.timer = self.create_timer(1.0/self.publish_rate, self._timer_callback)
         
@@ -86,11 +86,10 @@ class Test(Node):
         ]
         left_qpos_ros = [left_qpos[i] for i in left_qpos_idx]
         
-        print(left_qpos_ros)
         angle = self.rad_to_angle_val(left_qpos_ros)
-        print(angle)
         cmd = InspireHandCmd()
-        cmd.angle = [angle[0], angle[1], angle[2], angle[3], 1000, 1000]
+        cmd.angle = angle
+        # cmd.angle = [angle[0], angle[1], angle[2], angle[3], 1000, 1000]
         cmd.force = [self.force] * 6
         cmd.speed = [self.speed] * 6
         self._hand_pub.publish(cmd)
